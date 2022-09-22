@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::io::ErrorKind::WouldBlock;
 use std::process::{Command, Stdio};
 use std::io::Result;
 use std::net::{TcpListener, TcpStream};
@@ -54,13 +55,10 @@ fn main() -> () {
     let server = TcpListener::bind("127.0.0.1:9001").unwrap();
     for stream in server.incoming() {
         let socket_out_receiver = out_receiver.clone();
-        // let socket_in_sender = in_sender.clone();
+        let socket_in_sender = in_sender.clone();
 
         let mut parent_stream = stream.expect("Cannot open stream");
         parent_stream.set_nonblocking(true).expect("Could not set to non-blocking");
-
-        // let stdout_steam = parent_stream.try_clone().expect("Cannot clone stream");
-        // let stdin_steam = parent_stream.try_clone().expect("Cannot clone stream");
 
         spawn (move || {
             let mut websocket = accept(parent_stream).expect("Failed to start");
@@ -69,75 +67,27 @@ fn main() -> () {
                 let local_stream = websocket.get_mut();
 
                 let mut read_buffer = [0u8; 1];
-                let read_result = local_stream.read(&mut read_buffer);
+                let peek_result = local_stream.peek(&mut read_buffer);
 
-                if let Ok(_) = read_result {
-                    local_stream.flush().expect("n");
+                if let Ok(_) = peek_result {
                     let in_message = websocket.read_message().expect("Unable to read message");
 
-                    println!("m: {}", in_message.to_text().expect("Not text"));
-
-                    // println!("m: {}", read_buffer[0] as char);
-                    // local_stream.flush().expect("Could not flush");
+                    if in_message.is_text() {
+                        let text_message = in_message.into_text().expect("Not text");
+                        socket_in_sender.send(text_message).expect("Could not send");
+                    }
                 }
-
-                // parent_stream.read(&mut read_buffer).expect("Unable to read");
-
-                //
-
-                // if let Ok(msg_content) = msg {
-                //     println!("stdin: {}", msg_content.to_text().unwrap());
-                // }
 
                 let string = socket_out_receiver.recv().expect("Unable to receive");
 
                 let bytes = string.to_owned();
-                let message = String::from_utf8(bytes)
-                    .expect("Unable to format");
-                websocket.write_message(Message::text(message)).unwrap();
+                let message = String::from_utf8(bytes).expect("Unable to format");
+                let send_result = websocket.write_message(Message::text(message));
 
-                // We do not want to send back ping/pong messages.
-                // if msg.is_binary() || msg.is_text() {
-                //     websocket.write_message(msg).unwrap();
-                // }
+                if let Err(e) = send_result {
+                    
+                }
             }
         });
-
-        // spawn (move || {
-        //     let mut websocket = accept(stdin_steam).expect("Could not accept stream");
-        //
-        //     loop {
-        //         let msg = websocket.read_message().unwrap();
-        //
-        //         if msg.is_text() {
-        //             let command = msg.into_text().expect("Not a string");
-        //             socket_in_sender.send(command).expect("TODO: panic message");
-        //         }
-        //     }
-        // });
     }
-
-
-    // let mut output_stream = output.stdout.expect("STDOUT could not be opened");
-    // loop {
-    //     let mut output_string = String::new();
-    //     let mut take = output_stream
-    //
-    //     println!("a: {}", output_string);
-    // }
-
-    // let status = output.wait().expect("Error at exit");
-    // println!("End of the line {}", status);
-
-    // let mut i = output.stdout.expect("Error");
-    //
-    // loop {
-    //     // let string = String::from_utf8_lossy(&i)?;
-    //     let mut std_output = String::new();
-    //     i.read_to_string(&mut std_output)?;
-    //
-    //     println!("{}", std_output);
-    //
-    //
-    // }
 }
