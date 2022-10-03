@@ -72,6 +72,11 @@ fn main() -> () {
                 if let Ok(_) = peek_result {
                     let in_message = websocket.read_message().expect("Unable to read message");
 
+                    if in_message.is_close() {
+                        println!("Closing");
+                        break;
+                    }
+
                     if in_message.is_text() {
                         let text_message = in_message.into_text().expect("Not text");
                         socket_in_sender.send(text_message).expect("Could not send");
@@ -82,11 +87,7 @@ fn main() -> () {
 
                 let bytes = string.to_owned();
                 let message = String::from_utf8(bytes).expect("Unable to format");
-                let send_result = websocket.write_message(Message::text(message));
-
-                if let Err(e) = send_result {
-                    
-                }
+                websocket.write_message(Message::text(message)).expect("Unable to send");
             }
         });
     }
